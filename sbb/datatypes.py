@@ -327,6 +327,7 @@ class Block(DataType):
 
     def __init__(self, parent: Optional[Block], data: Optional[Any] = None) -> None:
         self.size = self._size
+        self.offset_of = self._offset_of
         self.root_path = None
         if data and '_root_path' in data:
             self.root_path = data['_root_path']
@@ -402,8 +403,26 @@ class Block(DataType):
     def _validate(self) -> None:
         pass
 
-    def offset_of(self, prop_name: str) -> int:
-        '''Gets the offset (in bytes) of the given property name.
+    def _offset_of(self, prop_name: str) -> int:
+        offset = 0
+        annotations = inspect.get_annotations(type(self), eval_str=True)
+        if not prop_name in annotations:
+            raise BuildError(f"Property name '{prop_name}' does not exist in {type(self).__name__}")
+        for name, datatype in annotations.items():
+            if name == prop_name:
+                return offset
+            attr = getattr(self, name, datatype)
+            if type(attr) is _Missing:
+                attr = datatype
+            offset += attr.size()
+        raise ValueError(f"Property name {prop_name} does not exist in {self.type_name()}")
+
+    @classmethod
+    def offset_of(cls, prop_name: str) -> int:
+        '''Gets the offset (in bytes) of the given property name. This works as
+        both a class method (for statically-known offsets) and as an instance
+        method, as long as all preceding properties have a statically-known
+        size or have already been populated with their data.
 
         It's preferable to directly call `offset()` on the child object,
         especially in a setter method, because SBB can figure out the
@@ -411,14 +430,14 @@ class Block(DataType):
         method can be useful in edge cases where `offset()` doesn't work.'''
 
         offset = 0
-        for name, datatype in inspect.get_annotations(type(self), eval_str=True).items():
+        annotations = inspect.get_annotations(cls, eval_str=True)
+        if not prop_name in annotations:
+            raise BuildError(f"Property name '{prop_name}' does not exist in {cls.__name__}")
+        for name, datatype in annotations.items():
             if name == prop_name:
                 return offset
-            attr = getattr(self, name, datatype)
-            if type(attr) is _Missing:
-                attr = datatype
-            offset += attr.size()
-        raise ValueError("Invalid property name")
+            offset += datatype.size()
+        return offset
 
 
 class _BlockItem:
