@@ -104,9 +104,11 @@ class DataType(ABC):
     def _get_data(self) -> Any:
         ...
 
+    @classmethod
     @abstractmethod
-    def size(self) -> int:
-        '''Gets the size (in bytes) of the data in this datatype.'''
+    def size(cls) -> int:
+        '''Gets the size (in bytes) of the data in this datatype. Usable as
+        either a class method or an instance method.'''
         ...
 
     @abstractmethod
