@@ -5,7 +5,7 @@ import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from types import UnionType
-from typing import Optional, Any, TypeVar, Generic, Type, Callable
+from typing import Optional, Any, Callable, Sequence, ClassVar
 from pathlib import Path
 from .errors import DataMissingError, ValidationError, BuildError
 
@@ -141,7 +141,7 @@ class _Primitive(DataType, int):
     '''The base class of primitive integer-based datatypes like `U8`, `U16`,
     and `U32`.'''
 
-    bit_size = 0
+    bit_size: ClassVar[int]
     _data: int
 
     def __new__(cls, _: Optional[Block], data: int):
@@ -178,7 +178,7 @@ class _Primitive(DataType, int):
         range_min = -int(math.pow(2, self.bit_size - 1))
         range_max = int(math.pow(2, self.bit_size) - 1)
         if self._data < range_min or self._data > range_max:
-            raise ValidationError(f"Value outside of range, must be {range_min} to {range_max}")
+            raise ValidationError(f"Value {self._data} outside of range, must be {range_min} to {range_max}")
 
     def __repr__(self) -> str:
         return f'{self._get_data()} ({hex(self._get_data())})'
@@ -187,19 +187,19 @@ class _Primitive(DataType, int):
 class U8(_Primitive):
     '''The datatype representing an 8-bit integer. If a signed value is
     provided, the two's compliment is generated.'''
-    bit_size = 8
+    bit_size: ClassVar[int] = 8
 
 
 class U16(_Primitive):
     '''The datatype representing a 16-bit integer. If a signed value is
     provided, the two's compliment is generated.'''
-    bit_size = 16
+    bit_size: ClassVar[int] = 16
 
 
 class U32(_Primitive):
     '''The datatype representing a 32-bit integer. If a signed value is
     provided, the two's compliment is generated.'''
-    bit_size = 32
+    bit_size: ClassVar[int] = 32
 
 
 class Bytes(DataType):
@@ -300,14 +300,13 @@ class _Missing(DataType):
         return False
 
 
-class Align(Bytes, Generic[TypeVar('T', bound=_Primitive)]):
+class Align[T: _Primitive](Bytes):
     '''The data alignment datatype.
 
-    Properties of type `Align` cannot be set
-    directly via setter method or data. Instead, an `Align` datatype will
-    produce the amount of padding bytes needed for the data structure to reach
-    the desired byte alignment. For example, `Align[U32]` will align the data
-    to the next 4-byte boundary.'''
+    Properties of type `Align` cannot be set directly via setter method or
+    data. Instead, an `Align` datatype will produce the amount of padding bytes
+    needed for the data structure to reach the desired byte alignment. For
+    example, `Align[U32]` will align the data to the next 4-byte boundary.'''
 
     def __init__(self, parent: Optional[Block], pad_amount: int) -> None:
         super().__init__(parent, bytes(pad_amount))
@@ -378,7 +377,7 @@ class Block(DataType):
                 "dependencies in these properties of "
                 f"{type(self).__name__}:\n{failed}"))
 
-    def _get_data(self) -> list[DataType]:
+    def _get_data(self) -> Sequence[DataType]:
         data = []
         for name in inspect.get_annotations(type(self), eval_str=True):
             data.append(getattr(self, name))
@@ -445,13 +444,13 @@ class _BlockItem:
     owner: Block
     offset: Optional[int] = None
     name: str
-    datatype: Type
-    argtype: Optional[Type] = None
+    datatype: type
+    argtype: Optional[type] = None
     value: DataType
     setter: Optional[Callable]
     dependencies: list[_BlockItem]
 
-    def __init__(self, owner: Block, name: str, datatype: Type, value: Optional[DataType]) -> None:
+    def __init__(self, owner: Block, name: str, datatype: type, value: Optional[DataType]) -> None:
         self.owner = owner
         self.name = name
         if value is not None:
@@ -502,8 +501,8 @@ class _BlockItem:
             if not hasattr(self.argtype, 'static_size'):
                 raise BuildError(f"Align argument must be a primitive type with a statically-known size")
             alignment = self.argtype.static_size()
-            offset_mod = self.owner.offset_of(self.name) % alignment
-            pad_needed = alignment - offset_mod if offset_mod != 0 else 0
+            offset_mod = (self.owner.offset_of(self.name) - 1) % alignment + 1
+            pad_needed = alignment - offset_mod
             value = Align(self.owner, pad_needed)
         else:
             raise DataMissingError(f"No setter or dict value found for {self.name}")
@@ -545,10 +544,10 @@ class _BlockItem:
         return self.datatype(self.owner, value)
 
 
-class Array(Block, list, Generic[TypeVar('T', bound=DataType)]):
+class Array[T: DataType](Block, list[T]):
     '''A raw array of items in the specified type.'''
 
-    def __init__(self, parent: Optional[Block], datatype: Optional[Type] = None, data: list = []) -> None:
+    def __init__(self, parent: Optional[Block], datatype: Optional[type] = None, data: list = []) -> None:
         self.size = self._size
         self._data = data
         super().__init__(parent)
@@ -562,7 +561,7 @@ class Array(Block, list, Generic[TypeVar('T', bound=DataType)]):
                     e.add_note(prop_name)
                     raise
 
-    def _get_data(self) -> list[DataType]:
+    def _get_data(self) -> Sequence[DataType]:
         return self
 
     @classmethod

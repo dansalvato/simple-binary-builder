@@ -8,7 +8,7 @@ SBB is a one-way tool: It takes source data and builds it into a binary file. If
 
 ## Requirements
 
-SBB requires Python 3.11 or higher.
+SBB requires Python 3.12 or higher.
 
 ## Examples
 

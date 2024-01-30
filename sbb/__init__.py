@@ -1,15 +1,11 @@
 import inspect
 import json
 import tomllib
-from typing import TypeVar
 from pathlib import Path
 from .datatypes import Array, Block, _Primitive, DataType
 
 
-_T = TypeVar('_T', bound=Block)
-
-
-def build_json(path: Path | str, root_type: type[_T]) -> _T:
+def build_json(path: Path | str, root_type: type[Block]) -> Block:
     '''Builds a JSON file into a Block of the provided type.'''
     with open(path) as f:
         data = json.loads(f.read())
@@ -17,7 +13,7 @@ def build_json(path: Path | str, root_type: type[_T]) -> _T:
     return root_type(None, data)
 
 
-def build_toml(path: Path | str, root_type: type[_T]) -> _T:
+def build_toml(path: Path | str, root_type: type[Block]) -> Block:
     '''Builds a TOML file into a Block of the provided type.'''
     with open(path) as f:
         data = tomllib.loads(f.read())
@@ -25,7 +21,7 @@ def build_toml(path: Path | str, root_type: type[_T]) -> _T:
     return root_type(None, data)
 
 
-def build_dict(data: dict, root_type: type[_T]) -> _T:
+def build_dict(data: dict, root_type: type[Block]) -> Block:
     '''Builds a dict into a Block of the provided type.'''
     return root_type(None, data)
 
